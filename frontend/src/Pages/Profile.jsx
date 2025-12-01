@@ -1,0 +1,110 @@
+import React from 'react'
+import axios from 'axios'
+import { useQuery } from '@tanstack/react-query'
+import useAuthStore from '../store/useAuthStore'
+import { useEffect } from 'react'
+import { Link } from 'react-router'
+
+const PROFILE_URL = 'http://localhost:4000/user'
+
+async function fetchProfile(id, token) {
+    if (!id) throw new Error('no-id')
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined
+    const response = await axios.get(`${PROFILE_URL}/${id}`, { headers })
+
+    // check if server returned a new token
+    const authHeader = response.headers.authorization
+    let newToken = null
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        newToken = authHeader.split(' ')[1]
+    }
+    return { data: response.data, newToken }
+}
+
+const Profile = () => {
+    const setAuth = useAuthStore((s) => s.setAuth)
+    const token = useAuthStore((s) => s.token)
+    const user = useAuthStore((s) => s.user)
+    const userId = user?._id
+    const { data, isLoading, isError, error, isFetched } = useQuery({
+        queryKey: ['profile', userId, token],
+        queryFn: () => fetchProfile(userId, token),
+    })
+    useEffect(() => {
+        // only update auth if the query has returned data and a new token was provided
+        if (isFetched && data && data.newToken) {
+            setAuth({
+                token: data.newToken,
+                role: data.data?.user?.role || user?.role,
+                user: data.data?.user || user
+            });
+        }
+    }, [data, isFetched, setAuth, user, userId]);
+    if (!userId) return <div className="p-6">No user available</div>
+    if (isLoading) return <div className="p-6">Loading...</div>
+    if (isError) return <div className="p-6">Error: {error?.message || 'Failed to load'}</div>
+
+
+
+    const profileUser = data?.data?.user || data?.data || user || {}
+    const API_BASE = 'http://localhost:4000'
+    const resolveImage = (path) => {
+        if (!path) return null
+        if (path.startsWith('http://') || path.startsWith('https://')) return path
+        if (path.startsWith('/')) return `${API_BASE}${path}`
+        return `${API_BASE}/${path}`
+    }
+
+    return (
+        <div className="max-w-3xl mx-auto p-6">
+            <div className="bg-gradient-to-br from-white via-blue-50 to-blue-100 dark:from-gray-900 dark:via-blue-900 dark:to-blue-950 p-10 rounded-2xl shadow-xl flex flex-col items-center border border-blue-100 dark:border-blue-900 my-10">
+                <h1 className="text-3xl font-extrabold mb-8 text-center text-blue-700 dark:text-blue-400 drop-shadow-lg">
+                    Profile
+                </h1>
+                <div className="mb-6 relative">
+                    {profileUser?.profilePicture ? (
+                        <img
+                            src={resolveImage(profileUser.profilePicture)}
+                            alt="avatar"
+                            className="h-36 w-36 rounded-full object-cover mx-auto border-4 border-blue-400 dark:border-blue-600 shadow-lg"
+                            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/vite.svg' }}
+                        />
+                    ) : (
+                        <div className="h-36 w-36 rounded-full bg-gradient-to-br from-blue-200 to-blue-400 dark:from-blue-800 dark:to-blue-900 flex items-center justify-center mx-auto text-white text-3xl font-bold shadow-lg">
+                            <span>No Image</span>
+                        </div>
+                    )}
+                    <span className="absolute bottom-2 right-2 bg-blue-600 text-white rounded-full px-2 py-1 text-xs shadow-md">Active</span>
+                </div>
+
+                <div className="text-center space-y-2">
+                    <div className="text-2xl font-bold text-gray-900 dark:text-white">{profileUser?.name || profileUser?.username || '—'}</div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300 flex items-center justify-center gap-2">
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="inline-block">
+                            <path d="M4 4h16v16H4V4zm8 8a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-4.418 0-8 2.239-8 5v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1c0-2.761-3.582-5-8-5z" fill="#3b82f6" opacity="0.5" />
+                        </svg>
+                        {profileUser?.email || '—'}
+                    </div>
+                    <div className="text-sm text-blue-700 dark:text-blue-400 font-medium">Role: {profileUser?.role || '—'}</div>
+                </div>
+
+                <div className="mt-8 flex gap-4">
+                    <Link
+                        to="/profile/edit"
+                        className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-400 text-white rounded-full font-semibold shadow hover:scale-105 hover:from-blue-700 hover:to-blue-500 transition-all duration-200 dark:from-blue-700 dark:to-blue-800 dark:hover:from-blue-800 dark:hover:to-blue-900"
+                    >
+                        Edit Profile
+                    </Link>
+                    <Link
+                        to="/dashboard"
+                        className="px-6 py-2 bg-white border border-blue-400 text-blue-700 rounded-full font-semibold shadow hover:bg-blue-50 hover:scale-105 transition-all duration-200 dark:bg-gray-900 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950"
+                    >
+                        Dashboard
+                    </Link>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export default Profile
